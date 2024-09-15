@@ -1,5 +1,6 @@
 package io.github.yujimaniax.grdc
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -27,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,26 +52,59 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class MainActivity : ComponentActivity() {
+    private val _uri = mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val uri = checkIntent(intent)
+        _uri.value = uri
+
         enableEdgeToEdge()
         setContent {
             GithubReleaseDownloadCounterTheme {
-                MainScreen()
+                MainScreen(_uri.value)
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val uri = checkIntent(intent)
+        _uri.value = uri
+    }
+}
+
+private fun checkIntent(intent: Intent): String {
+    if (intent.action == Intent.ACTION_SEND) {
+        intent.clipData.let { d ->
+            if (d != null) {
+                if (d.itemCount > 0) {
+                    val uri = d.getItemAt(0).text.toString()
+                    return uri
+                }
+            }
+        }
+    }
+
+    return ""
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(uri: String) {
     val scope = rememberCoroutineScope()
-    var target by remember { mutableStateOf("") }
+    var target by remember { mutableStateOf(uri) }
     var error by remember { mutableStateOf("") }
     val result = remember { mutableStateListOf<DownloadAssets>() }
     var btn by remember { mutableStateOf(true) }
     val focusManager = LocalFocusManager.current
+
+    SideEffect {
+        target = uri
+        error = ""
+        result.clear()
+    }
 
     Scaffold(
         topBar = {
@@ -146,6 +181,7 @@ fun MainScreen() {
                                     btn = false
                                     result.clear()
                                     scope.launch(Dispatchers.IO) {
+                                        target = replaceScheme(target)
                                         if(checkTargetUrl(target)){
                                             val type = checkUrlType(target)
                                             when (type) {
@@ -410,10 +446,19 @@ private fun replaceUrl(target: String): URL {
     return URL(dest)
 }
 
+private fun replaceScheme(target: String): String {
+    val url = URL(target)
+    return if (url.protocol.equals("http")) {
+        "https://" + url.host + url.path
+    } else {
+        target
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     GithubReleaseDownloadCounterTheme {
-        MainScreen()
+        MainScreen("aaa")
     }
 }
